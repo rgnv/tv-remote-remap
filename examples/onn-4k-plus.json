@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "longPressMs": 500,
+  "doublePressMs": 350,
+  "buttons": [
+    {
+      "code": 297,
+      "name": "Free TV",
+      "single": { "type": "NONE" }
+    },
+    {
+      "code": 190,
+      "name": "YouTube",
+      "single": {
+        "type": "APP",
+        "pkg": "com.google.android.youtube.tv",
+        "activity": "com.google.android.apps.youtube.tv.activity.ShellActivity",
+        "label": "YouTube"
+      }
+    },
+    {
+      "code": 191,
+      "name": "Netflix",
+      "single": {
+        "type": "APP",
+        "pkg": "org.siloserver.silo",
+        "activity": "org.siloserver.silo.tv.MainTvActivity",
+        "label": "Silo"
+      }
+    },
+    {
+      "code": 196,
+      "name": "Disney+",
+      "single": {
+        "type": "APP",
+        "pkg": "com.plexapp.android",
+        "activity": "tv.plex.app.MainActivity",
+        "label": "Plex"
+      }
+    },
+    {
+      "code": 197,
+      "name": "Paramount+",
+      "single": { "type": "NONE" }
+    }
+  ]
+}

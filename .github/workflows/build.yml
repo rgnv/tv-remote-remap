@@ -1,0 +1,102 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Untrusted code (PRs, branches) runs in this job: no secrets, no write token.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The ubuntu runner image ships the Android SDK under /usr/local/lib/android/sdk,
+      # but sdkmanager is not on PATH and setup-android@v3 is broken on cmdline-tools
+      # >= 12 (it runs `sdkmanager tools`, which no longer exists). Resolve the SDK
+      # here and only download packages that are actually missing.
+      - name: Android SDK
+        run: |
+          set -e
+          SDK=/usr/local/lib/android/sdk
+          [ -d "$SDK" ] || SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          ls "$SDK/build-tools" "$SDK/platforms"
+          SDKMGR=$SDK/cmdline-tools/latest/bin/sdkmanager
+          [ -x "$SDKMGR" ] || SDKMGR=$(find "$SDK/cmdline-tools" -name sdkmanager -type f | sort -V | tail -1)
+          NEED=""
+          [ -d "$SDK/platforms/android-35" ] || NEED="$NEED platforms;android-35"
+          [ -d "$SDK/build-tools/35.0.0" ] || NEED="$NEED build-tools;35.0.0"
+          if [ -n "$NEED" ]; then "$SDKMGR" --sdk_root="$SDK" --install $NEED; fi
+
+      # Branches and PRs build an unsigned (ephemeral debug key) APK — useful for
+      # smoke-testing, never published.
+      - name: Build (no secrets)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      # Tags are the trusted path: the only step that can see the release
+      # keystore. REQUIRE_KEYSTORE makes a missing/broken secret fail the build
+      # instead of silently shipping a debug-signed APK under a release tag.
+      - name: Build and sign release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          REQUIRE_KEYSTORE: "1"
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Verify signature
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          SDK=/usr/local/lib/android/sdk
+          "$SDK/build-tools/35.0.0/apksigner" verify --print-certs dist/*.apk | head -3
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv-remote-remap-apk
+          path: |
+            dist/*.apk
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  # Publishing is its own job: no checkout, no build script, no secrets — just
+  # the artifact produced above and the write token it needs.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tv-remote-remap-apk
+          path: dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS
+          generate_release_notes: true

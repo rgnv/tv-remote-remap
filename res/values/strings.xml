@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TV Remote Remap</string>
+    <string name="service_desc">Filters the remote keys you configure so they can launch apps, call webhooks or Home Assistant, open the voice assistant, or do nothing at all. Keys you have not configured are never touched.</string>
+</resources>
